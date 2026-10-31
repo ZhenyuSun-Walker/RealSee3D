@@ -116,6 +116,84 @@ Located at the **scene root** (alongside `viewpoints.txt`), this file stores the
 
 ## 3. Tools & Utilities
 
+### Perspective RGB-D Export (TD_mansion layout)
+
+`scripts/export_perspectives.py` exports **100 perspective RGB-D views per scene**
+directly into the original scene directories, alongside `viewpoints/` and any
+existing `pointclouds/` or `rgb_td/` data:
+
+```text
+scene_id/
+├── rgb/{0..99}.png       # RGBA; alpha 255 = valid panorama RGB, 0 = blind spot.
+├── depth/{0..99}.exr     # Float32, single channel V; camera Z depth in meters.
+├── cameras/{0..99}.json  # TD_mansion camera fields plus source/projection metadata.
+└── .perspective_export/  # Manifest, configuration, log, lock and completion marker.
+```
+
+Use an environment containing `numpy`, `opencv-python`, `OpenEXR`, `Imath` and
+`scipy`. For example, the installed `Pi3` Conda environment provides these packages.
+
+```bash
+# All real-world and synthetic scenes; outputs are written in place.
+python scripts/export_perspectives.py --workers 16 --summary logs/perspectives_summary.json
+
+# One scene, using the same defaults.
+python scripts/export_perspectives.py --source data/RealSee3D/real_world_data/scene_00523
+```
+
+The default resolution is **512×512**. The virtual lens uses the TD_mansion
+reference's 22 mm focal length and 36 mm sensor width (horizontal FOV about
+78.6 degrees), with intrinsics scaled to the output resolution. The source
+1600-pixel panorama contributes approximately 350 horizontal samples over this
+FOV. Set `--width 1024 --height 1024` to match TD_mansion's output dimensions;
+this increases storage and does not add source image detail.
+
+Frames are distributed as evenly as possible across available capture positions.
+Spatial farthest-point selection orders the positions and selects 100 when more
+than 100 are available. Directions are evenly spaced horizontally within each
+capture, with staggered starting directions across captures. All virtual cameras
+retain their source camera centers; default pitch is zero to avoid polar blind
+spots. Incomplete source viewpoints are listed in the manifest and excluded.
+If a selected direction contains no valid depth after clipping, the exporter
+chooses a distinct direction with measured depth at the same capture position.
+If no direction works there, it searches nearby capture positions. The camera
+JSON records the actual pose/direction and the original request in
+`requested_source_viewpoint_id`, `requested_yaw_degrees`, and
+`sampling_fallback_reason`; successful frames remain unchanged when resuming.
+
+RGB uses bilinear interpolation with horizontal seam wrapping. Depth uses nearest
+sampling, preserving the original sparse LiDAR holes, and converts panorama
+radial distance to optical-axis depth: `Z = (raw / scale) / ||K^-1 [u,v,1]||`.
+Invalid or out-of-clip-range depth is **0**, without depth completion. RGB alpha
+and depth validity are independent. Use `OpenEXR.InputFile(...).channel('V')` to
+read depth; OpenCV does not read the reference's V-channel EXRs reliably.
+
+The original Realsee3D metric world frame is preserved (world Y points downward).
+Camera JSON includes `intrinsic_matrix`, both Blender transform directions,
+`world_to_camera_cv`, `camera_to_world_cv`, projection matrix, location, lens,
+clip planes, source viewpoint, floor, yaw/pitch and validity fractions. Blender
+camera axes are converted from OpenCV using `diag(1,-1,-1,1)`; the world frame
+is unchanged. All paths follow TD_mansion's scene-relative naming convention.
+
+Re-running skips completed scenes and resumes partially exported scenes. A scene
+is marked complete only after all numbered RGB, depth and camera files exist.
+`--force` regenerates exporter-owned frames and allows resolution changes with
+the same frame count; unrelated existing outputs are never adopted. The batch
+continues after per-scene errors and reports failures in its log/summary. New
+scenes stop being submitted below `--min-free-gb` (default 50 GiB) of disk space.
+Verify geometry and restart behavior with `python -m unittest discover -s tests -v`.
+
+To repair scenes failed by an older running exporter without interrupting it:
+
+```bash
+python scripts/repair_perspective_exports.py --batch-log <original-batch.log> \
+    --follow-pid <original-exporter-pid> --workers 4 --summary logs/perspective_repairs.json
+```
+
+The repair task follows newly reported failures until the original batch exits.
+Its summary lists repaired scenes and any unresolved errors separately from the
+original batch's historical failure records. Omit `--follow-pid` for a single pass.
+
 ### Point Cloud Generation
 We provide a utility script, [`scripts/generate_pcd.py`](scripts/generate_pcd.py), to reconstruct the complete colored scene point cloud by aggregating data from all viewpoints. This tool handles the projection of depth maps to 3D space using the implied spherical intrinsics and the provided extrinsics.
 
