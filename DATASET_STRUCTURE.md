@@ -206,6 +206,26 @@ python scripts/generate_pcd.py --source <path_to_scene_dir> --output <output_dir
 *   `--output`: Destination directory for the generated `.ply` point cloud files.
 *   `--save_individual`: Optional flag to output separate point clouds for each viewpoint in addition to the merged scene.
 
+All generated PLY files use `binary_little_endian 1.0`, with packed float32 XYZ,
+uint8 RGB, and uint16 `observer_index` fields (17 bytes per vertex). Both merged
+and individual viewpoint files use this encoding. The top-down renderer accepts
+the previous ASCII files as well as binary PLY files.
+
+To convert existing point clouds in place:
+
+```bash
+python scripts/convert_pcd_to_binary.py --workers 4 --manifest logs/ply_binary.jsonl
+python scripts/convert_pcd_to_binary.py --audit-only --manifest logs/ply_binary_audit.json
+```
+
+Conversion preserves declared vertex properties and counts, verifies the binary
+payload checksum, and atomically replaces each source only after verification.
+Already valid little-endian binary files are skipped. By default only scenes
+with `pointclouds/.complete` are converted; `--include-incomplete` also includes
+unmarked scenes after old ASCII writers have stopped. A failed/interrupted run
+can be retried with the same command. Conversion logs and summaries are stored
+beside the manifest. Existing images and completion markers are preserved.
+
 ### Segmentation Visualization
 We provide a helper script, [`scripts/visualize_segmentation.py`](scripts/visualize_segmentation.py), that colourises a `segment.png` with the official palette (ID 0 stays black) and can optionally blend it over the RGB panorama.
 

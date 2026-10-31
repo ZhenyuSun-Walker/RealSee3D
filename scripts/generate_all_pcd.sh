@@ -21,6 +21,7 @@ Options:
   -h, --help        Show this help.
 
 Outputs: <scene>/pointclouds/{merged.ply,<viewpoint_id>.ply,generate.log,.complete}
+PLY encoding: binary_little_endian, packed XYZ/RGB/observer records (17 bytes/point).
 Activate your Conda environment first. PYTHON_BIN can override the interpreter.
 EOF
 }

@@ -4,32 +4,18 @@ import numpy as np
 import argparse
 import math
 
+try:
+    from .ply_io import write_binary_ply
+except ImportError:
+    from ply_io import write_binary_ply
+
 def ensure_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
 def write_ply(filename, points, colors, observer_indices):
-    """
-    Writes a PLY file with x, y, z, r, g, b, observer_index.
-    """
-    with open(filename, 'w') as f:
-        f.write("ply\n")
-        f.write("format ascii 1.0\n")
-        f.write(f"element vertex {len(points)}\n")
-        f.write("property float x\n")
-        f.write("property float y\n")
-        f.write("property float z\n")
-        f.write("property uchar red\n")
-        f.write("property uchar green\n")
-        f.write("property uchar blue\n")
-        f.write("property ushort observer_index\n")
-        f.write("end_header\n")
-        
-        for i in range(len(points)):
-            p = points[i]
-            c = colors[i]
-            oi = observer_indices[i]
-            f.write(f"{p[0]:.6f} {p[1]:.6f} {p[2]:.6f} {c[0]} {c[1]} {c[2]} {oi}\n")
+    """Atomically write packed binary_little_endian XYZ/RGB/observer records."""
+    write_binary_ply(filename, points, colors, observer_indices)
 
 def process_scene(data_root, output_dir, save_individual=False):
     viewpoints_dir = os.path.join(data_root, "viewpoints")
@@ -188,7 +174,7 @@ def process_scene(data_root, output_dir, save_individual=False):
         print("Done. No valid points found to save.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate colored point cloud from organized data.")
+    parser = argparse.ArgumentParser(description="Generate colored binary little-endian PLY point clouds.")
     parser.add_argument("--source", type=str, required=True, help="Path to the organized data directory (containing 'viewpoints' folder)")
     parser.add_argument("--output", type=str, default="pcd_results", help="Directory to save PLY files")
     parser.add_argument("--save_individual", action='store_true', help="Save individual PLY files for each viewpoint")

@@ -1,4 +1,4 @@
-"""Render a colored Realsee3D ASCII PLY as an orthographic top-down PNG.
+"""Render a colored Realsee3D ASCII or binary PLY as an orthographic top-down PNG.
 
 World X points right in the image and world Z points up. World Y points down;
 the smallest retained Y is the surface visible from above. Height limits remove
@@ -11,6 +11,11 @@ import sys
 
 import cv2
 import numpy as np
+
+try:
+    from .ply_io import read_xyzrgb
+except ImportError:
+    from ply_io import read_xyzrgb
 
 
 def scene_metadata(scene_dir):
@@ -66,40 +71,7 @@ def estimate_planes(points, camera_y=None):
 
 
 def read_ply(path):
-    with path.open() as stream:
-        if stream.readline().strip() != "ply":
-            raise ValueError("Input is not a PLY file")
-        properties = []
-        vertex_count = None
-        in_vertices = False
-        ascii_format = False
-        for line in stream:
-            fields = line.split()
-            if not fields:
-                continue
-            if fields[0] == "format":
-                ascii_format = fields[1] == "ascii"
-            elif fields[0] == "element":
-                in_vertices = fields[1] == "vertex"
-                if in_vertices:
-                    vertex_count = int(fields[2])
-            elif fields[0] == "property" and in_vertices:
-                if fields[1] == "list":
-                    raise ValueError("List properties on vertices are unsupported")
-                properties.append(fields[-1])
-            elif fields[0] == "end_header":
-                break
-        else:
-            raise ValueError("Missing PLY end_header")
-        if not ascii_format or not vertex_count:
-            raise ValueError("Expected a nonempty ASCII PLY")
-        columns = [properties.index(name) for name in
-                   ("x", "y", "z", "red", "green", "blue")]
-        points = np.loadtxt(stream, dtype=np.float32, usecols=columns,
-                            max_rows=vertex_count, ndmin=2)
-        if len(points) != vertex_count:
-            raise ValueError("PLY vertex count does not match the file contents")
-        return points
+    return read_xyzrgb(path)
 
 
 def main_region(occupied, resolution, radius, density):
